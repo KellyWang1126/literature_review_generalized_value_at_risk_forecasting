@@ -1,3 +1,3 @@
-# Literature Review Generalized Value at Risk (VaR) Forecasting
+# Literature Review Generalized Value at Risk Forecasting
 
 In the Generalized Value at Risk (VaR) Forecasting paper, a new volatility estimator using sign correlation and a data-driven generalized exponentially weighted moving average (DDEWMA) model using this new estimator are proposed. This report introduces the algorithms and feature of DDEWMA and one of the conventional VaR forecast models exponentially weighted moving average (EWMA) because they are both exponential weighted moving average based. In section 3, Bank of Montreal, Royal Bank of Canada, Toronto-Dominion Bank and ScotiaBank stock continuously compounded returns are used to implement the VaR forecasting.
