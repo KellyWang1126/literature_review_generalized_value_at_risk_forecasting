@@ -1,0 +1,286 @@
+---
+title: "STAT 7260 Project Code"
+author: "Ke Wang"
+date: "2023-11-15"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, warning=FALSE, include=FALSE}
+library(tseries)
+library(zoo)
+library(moments)
+library(car)
+library(MASS)
+library(stats)
+library(fGarch)
+library(readxl)
+library(plotly)
+library(PerformanceAnalytics)
+library(quantmod)
+library(VGAM)
+library(scales)
+library(PEIP)
+library(ggplot2)
+library(gridExtra)
+```
+
+
+#### Historical Finance Data Download from Yahoo!Finance
+
+```{r}
+# set start and end date of data to download
+dateStart <- "2013-01-01"               
+dateEnd <- "2023-7-31"
+
+# Bank of Montreal 
+bmo <- get.hist.quote(instrument = "BMO", start = dateStart, end = dateEnd, quote = c("AdjClose"),
+                        retclass = "zoo")
+# Royal Bank of Canada
+rbc <- get.hist.quote(instrument = "RBC", start = dateStart, end = dateEnd, quote = c("AdjClose"),
+                       retclass = "zoo")
+# Toronto-Dominion Bank
+td <- get.hist.quote(instrument = "TD", start = dateStart, end = dateEnd, quote = c("AdjClose"),
+                      retclass = "zoo")
+# Bank of Nova Scotia
+bns <- get.hist.quote(instrument = "BNS", start = dateStart, end = dateEnd, quote = c("AdjClose"),
+                        retclass = "zoo") 
+
+```
+
+
+```{r}
+# preview of datasets 
+data <- merge(bmo, rbc, td, bns) # price data
+head(data)
+save(data, file="stock.Rdata")
+```
+
+
+#### EDA 
+
+```{r}
+# plot of daily price
+names(data) <- c("BMO", "RBC", "TD", "BNS")
+plot(data, xlab = "Days", main = "Daily price history of BMO, RBC, TD, BNS vs Time", col = c("black","Blue","green","red"))
+```
+
+
+```{r}
+# calculation of continuously compounded returns as difference in log prices
+return.cc <- diff(log(data))
+
+# remove missing values
+sum(is.na(return.cc))
+return.cc <- na.omit(return.cc) 
+sum(is.na(return.cc))
+head(return.cc)
+```
+
+
+```{r}
+# plot of log returns
+plot(return.cc, xlab = "Days", main = "Daily Log Returns of BMO, RBC, TD, BNS vs Time", col = c("black","Blue","green","red"))
+
+# density and histograms of log returns
+names(return.cc) <- c("BMO", "RBC", "TD", "BNS")
+par(mfrow=c(2,2))
+for (i in 1:ncol(return.cc)) {
+  chart.Histogram(return.cc[,i], main = paste(names(return.cc)[i]), breaks = 40,
+  colorset= c("lightgray","blue","red"), methods = c("add.density", "add.normal"))
+}
+```
+
+
+#### Basic Statistics
+
+```{r}
+return.cc <- data.frame(return.cc)
+
+mean.cc <- apply(return.cc, 2, mean)
+sd.cc <- apply(return.cc, 2, sd)
+min.cc <- apply(return.cc, 2, min)
+max.cc <- apply(return.cc, 2, max)
+kurt.cc <- kurtosis(return.cc)
+skew.cc <- skewness(return.cc)
+
+ss1 <- data.frame(mean.cc, sd.cc, min.cc, max.cc, t(kurt.cc), t(skew.cc))
+```
+
+
+```{r}
+# correlation of return series
+acf1 <- apply(return.cc, 2, acf, lag=1, plot=F)
+corr1 <- c(acf1$BMO$acf[2], acf1$RBC$acf[2], acf1$TD$acf[2], acf1$BNS$acf[2]) # extracting acf values
+
+# correlation of squared return series
+acf2 <- apply(return.cc^2, 2, acf, lag=1, plot=F)
+corr2 <- c(acf2$BMO$acf[2], acf2$RBC$acf[2], acf2$TD$acf[2], acf2$BNS$acf[2])
+
+# correlation of absolute return series
+acf3 <- apply(abs(return.cc), 2, acf, lag=1, plot=F)
+corr3 <- c(acf3$BMO$acf[2], acf3$RBC$acf[2], acf3$TD$acf[2], acf3$BNS$acf[2])
+```
+
+
+#### Method 1: EWMA
+
+
+```{r}
+# function to get optimal alpha that gives minimum SSE 
+alpha <- seq(.01,.3,.01)
+alpha.opt.e <- c()
+SSE <- matrix(0, length(alpha), ncol(return.cc))
+
+for (i in 1:length(alpha)) {
+  for (j in 1:ncol(return.cc)) {
+    s <- mean(return.cc[,j]^2)
+    for (k in 1:nrow(return.cc)) {
+      error <- return.cc[k,j]^2 - s 
+      SSE[i,j] <- error^2 + SSE[i,j]
+      s.k <- alpha[i]*(return.cc[k,j]^2) + (1 - alpha[i])*s
+      s <- s.k
+    }
+     alpha.opt.e[j] <- alpha[which.min(SSE[,j])]
+  }
+}
+alpha.opt.e
+```
+
+```{r}
+# find one-step ahead forward volatility forecast using optimal alpha
+v.e <- c()
+for (i in 1:ncol(return.cc)) {
+  s <- mean(return.cc[,i]^2)
+  for (j in 1:nrow(return.cc)) {
+    s.j <- alpha.opt.e[i]*(return.cc[j,i]^2) + (1 - alpha.opt.e[i])*s
+    s <- s.j
+  }
+  v.e[i] <- sqrt(s)
+}
+v.e
+```
+
+
+```{r}
+# find VaR forecast
+p <- 0.01
+VaR.e <- (-1)*qnorm(p)*v.e
+VaR.e
+```
+
+
+#### DDEWMA
+
+
+```{r}
+# function to compute sign correlation
+rho.cal <- function(X){
+  rho.hat <- cor(sign(X-mean(X)), X-mean(X))
+  return(rho.hat)
+}
+
+# find sign correlation 
+rho.sign <- NULL
+for (i in 1:ncol(return.cc)) {
+  rho.sign[i] <- apply(return.cc[i], 2, rho.cal)
+}
+rho.sign
+```
+
+
+```{r}
+# find degrees of freedom
+df <- NULL
+for (i in 1:ncol(return.cc)) {
+  fun <- function (x) rho.sign[i]*(x-1)*beta(x/2,1/2)-2*sqrt(x-2)
+  df[i] <- uniroot(fun, c(2, 8), extendInt = "yes")$root
+}
+df
+```
+
+
+```{r}
+# function to get optimal alpha that gives minimum SSE 
+alpha.opt.d <- c()
+SSE <- matrix(0, length(alpha), ncol(return.cc))
+
+for (i in 1:length(alpha)) {
+  for (j in 1:ncol(return.cc)) {
+    s <- mean(abs(return.cc[,j])/rho.sign[j])
+    for (k in 1:nrow(return.cc)) {
+      error <- abs(return.cc[k,j])/rho.sign[j] - s 
+      SSE[i,j] <- error^2 + SSE[i,j]
+      s.k <- alpha[i]*(abs(return.cc[k,j])/rho.sign[j]) + (1 - alpha[i])*s
+      s <- s.k
+    }
+     alpha.opt.d[j] <- alpha[which.min(SSE[,j])]
+  }
+}
+alpha.opt.d
+```
+
+
+
+```{r}
+# find one-step ahead forward volatility forecast using optimal alpha
+v.d <- c()
+for (i in 1:ncol(return.cc)) {
+  s <- mean(abs(return.cc[,i])/rho.sign[i])
+  for (j in 1:nrow(return.cc)) {
+    s.j <- alpha.opt.d[i]*(abs(return.cc[j,i])/rho.sign[i]) + (1 - alpha.opt.d[i])*s
+    s <- s.j
+  }
+  v.d[i] <- s
+}
+v.d
+```
+
+```{r}
+# find VaR forecast
+VaR.d <- (-1)*v.d*tinv(p, df)
+VaR.d
+```
+
+#### Numerical and Graphical Summary
+
+
+
+```{r}
+# summary statistics
+summarystat <- data.frame(ss1, corr1, corr2, corr3, rho.sign, df, alpha.opt.e, alpha.opt.d, v.e, v.d, VaR.e, VaR.d)
+summarystat
+```
+
+
+
+```{r}
+# graphical summary for VaR forecasts
+stock <- c("BMO","RBC","TD","BNS")
+VaR.data <- data.frame(stock, VaR.e, VaR.d)
+
+p.e <- VaR.data %>% 
+  ggplot(aes(x = stock, y = VaR.e, size = VaR.e, color = stock)) + 
+  labs(x = "Stock", y = "VaR Forecast", color = "Stock") + 
+  geom_point(alpha = 0.3) +
+  scale_size(range = c(5, 15)) + 
+  guides(size = FALSE) + 
+  ggtitle("One-Step Forward VaR Forecast Using EWMA")
+
+p.d <- VaR.data %>% 
+  ggplot(aes(x = stock, y = VaR.d, size = VaR.d, color = stock)) + 
+  labs(x = "Stock", y = "VaR Forecast", color = "Stock") + 
+  geom_point(alpha = 0.3) +
+  scale_size(range = c(5, 15)) +
+  guides(size = FALSE) +
+  ggtitle("One-Step Forward VaR Forecast Using DDEWMA")
+
+grid.arrange(p.e, p.d, ncol = 2)
+```
+
+
+
