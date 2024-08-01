@@ -1,0 +1,467 @@
+---
+title: "Literature Review: Generalized Value at Risk Forecasting"
+author: "Ke Wang"
+date: "2023-11-27"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Abstract
+
+In the Generalized Value at Risk (VaR) Forecasting paper, a new volatility estimator using sign correlation and a data-driven generalized exponentially weighted moving average (DDEWMA) model using this new estimator are proposed. This report introduces the algorithms and feature of DDEWMA and one of the conventional VaR forecast models exponentially weighted moving average (EWMA) because they are both exponential weighted moving average based. In section 3, Bank of Montreal, Royal Bank of Canada, Toronto-Dominion Bank and ScotiaBank stock continuously compounded returns are used to implement the VaR forecasting. 
+
+
+
+# 1. Introduction
+
+Nowadays, statistical measures of risk exposure play fundamental a role in policy and decision making within financial institutions. The goal of risk measures is to evaluate the hazards and then minimize the level of its risk to control potential the loss. Due to the global economic crisis of 2007-2008, researchers have been made great efforts to improve the estimation and forecasting of risk exposure measures. The most commonly used risk forecast types are Value-at-Risk (VaR) and Expected Shortfall (ES) and both measures depend on the accurate forecasting of volatility. 
+
+The Basel Committee on Banking Supervision has identified VaR as the preferred approach to set minimum capital requirements for market risk. It is a statistic that is used to predict the greatest possible losses over a specific time frame. There exist many VaR forecast models such as nonparametric model historical simulation (HS) and parametric models moving average (MA), exponentially weighted moving average (EWMA) and generalized autoregressive conditional heteroskedasticity (GARCH). To obtain the forecast of VaR using EWMA or GARCH models, the volatility need to be computed first. In terms of estimating volatility, the two models first obtain the forecast of the conditional variance $\sigma_t^2$ of the continuously compounded (cc) returns and then take its square root to obtain the forecast of the conditional volatility $\sigma_t$. But this way of estimation can often bring issues. First, the normality assumption of EWMA and GARCH leads to a gross underestimation of risk. Unfortunately, the non-normality assumptions often characterize the real world. Second, the estimator of volatility using EWMA or GARCH is biased, implying existence of overestimate or underestimate. Finally, when the cc returns are Student-t distributed with degrees of freedom less than 4 which is a common case for financial data sets, the variance estimation becomes infinite because the kurtosis is infinite.  
+
+In paper Generalized Value at Risk Forecasting, a new estimating function (EF) based data-driven generalized EWMA (DDEWMA) model was proposed which can resolve the issues brought by EWMA and GARCH approaches. DDWEMA can handle data sets with more than just normal distribution. The new EF based approach estimates volatility directly instead of using square root of conditional variance of cc returns. The volatility estimate under this approach is unbiased. And the variance of the estimate is considerably smaller than conventional estimate and finite even if the kurtosis is infinite. 
+
+
+# 2. Methodology
+
+In finance, we are more interested in the return of the price instead of price denoted as $P_t$ itself, where $t$ refers to the day in this report, but can indicate any frequency. For single-period analysis, simple return (2.1) is often used, while for multi-period analysis, cc return (2.2) is considered to be more appropriate because cc return is additive and usually more stationary. 
+
+$$ r_t = \frac{P_t - P_{t-1}}{P_{t-1}} \quad \quad \quad\quad\quad\quad\quad\quad\quad (2.1) $$
+
+$$ r_t = \text{log}P_t - \text{log}P_{t-1} \quad\quad\quad\quad\quad\quad\quad (2.2) $$
+
+
+
+## 2.1 Exponentially Weighted Moving Average (EWMA)
+### 2.1.1 Model Introduction
+
+We assume that the observations follows the mean model
+
+$$z_t = \mu + \epsilon_t$$
+where $\mu$ is a constant mean level and $\epsilon_t$ is a sequence of uncorrelated errors with mean equal to zero and constant variance $\sigma^2$. However, the constant mean level assumption is restrictive in real world. If the mean changes slowly over time, it is more appropriate to give more weights to the most recent observations instead of giving even weights to all observations. With this setting, the $l$ ahead forecast of observations are all the same and can be calculated from 
+
+$$ \hat{z_n}(l) = c\sum_{t=0}^{n-1}w^tz_{n-t} = c[z_n + wz_{n-1} + ... + w^{n-1}z_1] $$
+
+The constant $w(|w|<1)$ is a discount coefficient. This coefficient, which should depend on how fast the mean level changes, is usually chosen between 0.7 and 0.95; in many applications a value of 0.9 is suggested. The factor $c=(1-w)/(1-w^n)$ is needed to normalize the sum of the weights to 1.
+
+If n is large, then the term $w^n$ in the normalizing constant $c$ goes to zero, and exponentially weighted forecast $\hat{z_n}(l)$ can be rewritten as
+
+$$ \hat{z_n}(l) = (1-w)\sum_{j \geq 0}w^jz_{n-j} = (1-w)[z_n + wz_{n-1} + w^2z_{n-2}+...] $$
+
+The coefficient $\alpha = 1-w$ is called the smoothing constant and is usually chosen between 0.01 and 0.30. The expression 
+$$ S_n = \alpha[z_n + (1-\alpha)z_{n-1} + (1-\alpha)^2z_{n-2}+...]$$
+is called the smoothed statistic and the last smoothed statistic $S_n$ is the forecast for all future observation, $\hat{z_n}(l) = S_n$. 
+
+With knowing mechanism, we can now introduce the algorithm of EWMA. \newline
+
+Step(1): Calculate initial value $S_0 = \bar{Z}$. \newline
+
+Step(2): Choose a value of smoothing constant $\alpha$ usually from (0.01, 0.30). \newline
+
+Step(3): For each fixed $\alpha$, calculate the smoothed statistic 
+$$\begin{aligned} 
+&S_0 = \bar{z}\\
+&S_1 = \alpha z_1 + (1-\alpha)S_0 \\
+&S_2 = \alpha z_2 + (1-\alpha)S_1 
+\end{aligned}
+$$
+$$.$$
+$$.$$
+$$.$$
+$$
+S_n = \alpha z_n + (1-\alpha)S_{n-1}
+$$
+
+Step(4): Calculate the one-step ahead forecast errors
+$$e_{t-1}(1) = z_t - z_{t-1}(1) = z_t - S_{t-1}$$
+and for each $\alpha$ calculate the one-step ahead forecast error sum of squares, 
+$$\text{SSE}(\alpha) = \sum_{t=1}^{n}e^2_{t-1}(1)$$
+
+Step(5): Obtain the smoothing constant by minimizing the one-step-ahead forecast error sum of squares. \newline
+
+Step(6): Use the optimal smoothing constant to obtain the future forecasts $\hat{z_n}(l) = S_n$.
+
+
+### 2.1.2 Volatility Forecast
+
+To forecast volatility using EWMA model, we set $z_t = (r_t - \bar{r})^2, t=1,2,...,n$. In VaR forecast, it is common to set the mean of the return series as zero. Hence, we can set $\bar{r}=0$ and rewrite $z_t$ as $z_t = r_t^2$. Then, we apply the EWMA algorithm above. The forecast of the variance $\sigma^2$ is given by 
+$$\hat{\sigma}^2_{n+1} = S_n$$
+and the forecast of the volatility is then given by 
+$$\hat{\sigma}_{n+1} = \sqrt{S_n}$$
+
+
+### 2.1.2 VaR Forecast
+
+With one-step ahead forecast volatility $\hat{\sigma}_{n+1}$ given by EWMA, we can obtain the VaR forecast using the following equation: 
+$$\text{VaR}(p) = -\hat{\sigma}_{t+1}F^{-1}_R(p)$$
+where $p$ is the confidence level.
+
+
+## 2.2 Data-Driven Exponentially Weighted Moving Average (DDEWMA)
+### 2.2.1 Model Introduction
+
+DDEWMA model introduce the use of sign correlation $\rho$. For any random variable $X$ with mean $\mu$, finite varince $\sigma^2$ and cdf $F(x)$, the sign correlation is defined as 
+$$ \begin{aligned} 
+\rho &= \text{Corr}(X-\mu, \text{sgn}(X-\mu)) \\
+&= \frac{\text{Cov}(X-\mu, \text{sgn}(X-\mu))}{\sqrt{\text{Var}(X-\mu)\text{Var(sgn}(X-\mu))}}
+\end{aligned} $$
+
+where
+$$ \begin{aligned} 
+\text{Cov}(X-\mu, \text{sgn}(X-\mu)) &= \text{E}[(X-\mu)(\text{sgn}(X-\mu))] - \text{E}(X-\mu)\text{E}(\text{sgn}(X-\mu)) \\
+&= \text{E}[(X-\mu)(\text{sgn}(X-\mu))] \\
+&= \text{E}|X-\mu|
+\end{aligned} $$
+
+and 
+$$ \begin{aligned} 
+\text{Var}(X-\mu) &= \text{Var}(X) \\
+&= \sigma^2
+\end{aligned} $$
+$$ \begin{aligned} 
+\text{Var(sgn}(X-\mu)) &= \text{E}\{[\text{sgn}(X-\mu)^2]\} - \{\text{E}[\text{sgn}(X-\mu)]\}^2 \\
+&= 1 - \{\text{E} (1_{[X>\mu]} - 1_{[X \leq \mu]}) \}^2 \\
+&= 1 - \{\text{E} (1- 1_{[X \leq \mu]} - 1_{[X \leq \mu]}) \}^2 \\
+&= 1 - \{\text{E} (1- 2*1_{[X \leq \mu]}) \}^2 \\
+&= 1 - [1 - 2\text{F(}\mu)]^2 \\
+&= 1 - 1 + 4\text{F(}\mu) - 4\text{F(}\mu)^2 \\
+&= 4\text{F(}\mu)[1-\text{F(}\mu)]
+\end{aligned} $$
+
+Then 
+$$ \begin{aligned} 
+\rho &= \frac{\text{E}|X-\mu|}{\sqrt{4\sigma^2\text{F(}\mu)[1-\text{F(}\mu)}]} \\
+&= \frac{\text{E}|X-\mu|}{2\sigma\sqrt{\text{F(}\mu)[1-\text{F(}\mu)}]}
+\end{aligned} $$
+
+For symmetric distributions with finite variance, $\text{E}|X-\mu| = \rho\sigma$ since $\text{F}(\mu) = \frac{1}{2}$. 
+
+The sign correlation $\rho$ plays an important role in volatility estimation and degree of freedom estimation as degree of freedom is estimated using this equation
+$$ 2\sqrt{\nu-2} = \rho(\nu-1)\text{Beta}[\frac{\nu}{2},\frac{1}{2}]$$
+
+
+### 2.2.2 Volatility Forecast
+
+The algorithm of volatility forecast using DDEWMA is similar to that of using EWMA except that we set $z_t = \frac{|r_t-\bar{r}|}{\hat{\rho}}$, where $\hat{\rho}$ is the estimated sign correlation using cc returns and is given by 
+$$\hat{\rho} = \text{Corr}(r_t-\bar{r}, \text{sgn}(r_t-\bar{r}))$$
+It is again common to set $\bar{r}$ as zero. After applying DDEWMA algorithm, the volatility forecast is given by $$\hat{\sigma}_{n+1} = S_n$$
+
+One of the advantages mentioned in section 1 is that the volatility estimator using DDEWMA has considerably smaller variance than that using EWMA has. The asymptotic variance of estimated volatility $\hat{\sigma}_d$ by DDEWMA is given by 
+$$\text{As.Var}(\hat{\sigma}_d) = \frac{1}{n} (\frac{1-\hat{\rho}^2}{\hat{\rho}^2}){\sigma}^2$$
+
+EWMA model estimates volatility $\hat{\sigma}_e$ by taking the square root of the estimated sample variance $\hat{\sigma^2}_e$. Hence, to obtain the asymptotic variance of $\hat{\sigma}_e$, first we need to calculate the variance of sample variance given by 
+$$\text{Var}(\hat{\sigma^2}_e) = (k+2)\frac{{\sigma}^4}{n}$$
+where $k$ is the excess kurtosis of cc returns. Then we can use delta method to show that the asymptotic variance of $\hat{\sigma}_e$ is given by 
+$$\text{As.Var}(\hat{\sigma}_e) = \frac{k+2}{4} \frac{{\sigma^2}}{n}$$
+
+
+When cc returns are t-distributed with degrees of freedom less than four, As.Var($\hat{\sigma}_e$) is infinite as $k$ is infinite. However, As.Var($\hat{\sigma}_d$) will remain finite even if $k$ is infinite. In other words, asymptotic variance of DDEWMA volatility estimator is less than the asymptotic variance of EWMA volatility estimator.
+
+
+### 2.2.3 VaR Forecast
+
+With one-step ahead forecast volatility $\hat{\sigma}_{n+1}$ given by DDEWMA, we can obtain the VaR forecast using the  following equation: 
+$$\text{VaR}(p) = -\hat{\sigma}_{t+1}F^{-1}_R(p)$$
+where $p$ is the confidence level. The equation is the same with the one used for forecasting VaR with EWMA model.
+
+
+# 3. Data Application
+
+## 3.1 Data Overview
+In this section, various sample statistics and estimates based on previous proof for four stock returns are computed. The selected four stocks are from Bank of Montreal (BMO), Royal Bank of Canada (RBC), Toronto-Dominion Bank (TD) and Scotiabank (BNS). All datasets are obtained from yahoo finance as open resources and currency in U.S. dollar. The time frame chosen is 2013-01-01 to 2023-07-31. 
+
+
+## 3.2 Exploratory Data Analysis
+
+```{r, warning=FALSE, include=FALSE, echo=FALSE}
+library(tseries)
+library(zoo)
+library(moments)
+library(car)
+library(MASS)
+library(stats)
+library(fGarch)
+library(readxl)
+library(plotly)
+library(PerformanceAnalytics)
+library(quantmod)
+library(VGAM)
+library(scales)
+library(PEIP)
+library(ggplot2)
+library(gridExtra)
+library(kableExtra)
+```
+
+
+```{r, include=FALSE, echo=FALSE}
+# set start and end date of data to download
+dateStart <- "2013-01-01"               
+dateEnd <- "2023-7-31"
+
+# Bank of Montreal 
+bmo <- get.hist.quote(instrument = "BMO", start = dateStart, end = dateEnd, quote = c("AdjClose"),
+                        retclass = "zoo")
+# Royal Bank of Canada
+rbc <- get.hist.quote(instrument = "RBC", start = dateStart, end = dateEnd, quote = c("AdjClose"),
+                       retclass = "zoo")
+# Toronto-Dominion Bank
+td <- get.hist.quote(instrument = "TD", start = dateStart, end = dateEnd, quote = c("AdjClose"),
+                      retclass = "zoo")
+# ScotiaBank
+bns <- get.hist.quote(instrument = "BNS", start = dateStart, end = dateEnd, quote = c("AdjClose"),
+                        retclass = "zoo") 
+
+```
+
+
+Compared to Figure 1, lines in Figure 2 are much more stationary. Visually speaking, there is not much difference among the four volatility. They all experienced great fluctuations at early 2020 due to COVID and recovered around 2021. BMO, TD and BNS reached their latest peak at early 2022, while RBC did not follow. After that, they shared very similar patterns.  
+
+
+```{r,echo=FALSE}
+# plot of daily price
+data <- merge(bmo, rbc, td, bns) # price data
+names(data) <- c("BMO", "RBC", "TD", "BNS")
+plot(data, xlab = "Days", main = "Figure 1: Daily Price of BMO, RBC, TD, BNS vs Time", col = c("black","Blue","green","red"))
+```
+
+
+```{r,echo=FALSE, include=FALSE}
+# calculation of continuously compounded returns as difference in log prices
+return.cc <- diff(log(data))
+
+# remove missing values
+sum(is.na(return.cc))
+return.cc <- na.omit(return.cc) 
+sum(is.na(return.cc))
+```
+
+
+```{r, echo=FALSE}
+# plot of log returns
+plot(return.cc, xlab = "Days", main = "Figure 2: Daily CC Returns of BMO, RBC, TD, BNS vs Time", col = c("black","Blue","green","red"))
+```
+
+
+Figure 3 indicates that the stock cc returns follow along with a normal distribution. And the stock cc returns have higher peaks than the standard normal curve.
+
+
+```{r, echo=FALSE}
+# density and histograms of log returns
+par(mfrow=c(2,2))
+chart.Histogram(return.cc$BMO, breaks=40, colorset=c("lightgray","blue","red"), methods = c("add.density", "add.normal"), cex.main=0.8, xlab="BMO Log Returns", ylab="Counts")
+legend("topleft", lty=c(1, 1), col=c("red", "blue"), legend=c("Normal curve","Density curve of data"), cex=0.5)
+
+chart.Histogram(return.cc$RBC, breaks=40, colorset=c("lightgray","blue","red"), methods = c("add.density", "add.normal"), cex.main=0.8, xlab="RBC Log Returns", ylab="Counts")
+legend("topleft", lty=c(1, 1), col=c("red", "blue"), legend=c("Normal curve","Density curve of data"), cex=0.5)
+
+chart.Histogram(return.cc$TD, breaks=40, colorset=c("lightgray","blue","red"), methods = c("add.density", "add.normal"),  cex.main=0.8, xlab="TD Log Returns", ylab="Counts")
+legend("topleft", lty=c(1, 1), col=c("red", "blue"), legend=c("Normal curve","Density curve of data"), cex=0.5)
+
+chart.Histogram(return.cc$BNS, breaks=40, colorset=c("lightgray","blue","red"), methods = c("add.density", "add.normal"), cex.main=0.8, xlab="BNS Log Returns", ylab="Counts")
+legend("topleft", lty=c(1, 1), col=c("red", "blue"), legend=c("Normal curve","Density curve of data"), cex=0.5)
+
+mtext("Figure 3: Stock CC Returns vs. Standard Normal Distribution", side = 3, line = - 2, outer = TRUE)
+```
+
+
+## 3.3 Numerical and Graphical Summary
+
+
+The sample statistics and estimates are shown in the following table. 
+
+
+```{r, echo=FALSE}
+return.cc <- data.frame(return.cc)
+
+mean.cc <- apply(return.cc, 2, mean)
+sd.cc <- apply(return.cc, 2, sd)
+min.cc <- apply(return.cc, 2, min)
+max.cc <- apply(return.cc, 2, max)
+kurt.cc <- kurtosis(return.cc)
+skew.cc <- skewness(return.cc)
+
+ss1 <- data.frame(mean.cc, sd.cc, min.cc, max.cc, t(kurt.cc), t(skew.cc))
+```
+
+
+```{r, echo=FALSE}
+# correlation of return series
+acf1 <- apply(return.cc, 2, acf, lag=1, plot=F)
+corr1 <- c(acf1$BMO$acf[2], acf1$RBC$acf[2], acf1$TD$acf[2], acf1$BNS$acf[2]) # extracting acf values
+
+# correlation of squared return series
+acf2 <- apply(return.cc^2, 2, acf, lag=1, plot=F)
+corr2 <- c(acf2$BMO$acf[2], acf2$RBC$acf[2], acf2$TD$acf[2], acf2$BNS$acf[2])
+
+# correlation of absolute return series
+acf3 <- apply(abs(return.cc), 2, acf, lag=1, plot=F)
+corr3 <- c(acf3$BMO$acf[2], acf3$RBC$acf[2], acf3$TD$acf[2], acf3$BNS$acf[2])
+```
+
+
+```{r, echo=FALSE}
+# function to get optimal alpha that gives minimum SSE 
+alpha <- seq(.01,.3,.01)
+alpha.opt.e <- c()
+SSE <- matrix(0, length(alpha), ncol(return.cc))
+
+for (i in 1:length(alpha)) {
+  for (j in 1:ncol(return.cc)) {
+    s <- mean(return.cc[,j]^2)
+    for (k in 1:nrow(return.cc)) {
+      error <- return.cc[k,j]^2 - s 
+      SSE[i,j] <- error^2 + SSE[i,j]
+      s.k <- alpha[i]*(return.cc[k,j]^2) + (1 - alpha[i])*s
+      s <- s.k
+    }
+     alpha.opt.e[j] <- alpha[which.min(SSE[,j])]
+  }
+}
+```
+
+
+```{r, echo=FALSE}
+# find one-step ahead forward volatility forecast using optimal alpha
+v.e <- c()
+for (i in 1:ncol(return.cc)) {
+  s <- mean(return.cc[,i]^2)
+  for (j in 1:nrow(return.cc)) {
+    s.j <- alpha.opt.e[i]*(return.cc[j,i]^2) + (1 - alpha.opt.e[i])*s
+    s <- s.j
+  }
+  v.e[i] <- sqrt(s)
+}
+```
+
+
+```{r, echo=FALSE}
+# find VaR forecast
+p <- 0.01
+VaR.e <- (-1)*qnorm(p)*v.e
+```
+
+
+```{r, echo=FALSE}
+# function to compute sign correlation
+rho.cal <- function(X){
+  rho.hat <- cor(sign(X-mean(X)), X-mean(X))
+  return(rho.hat)
+}
+
+# find sign correlation 
+rho.sign <- NULL
+for (i in 1:ncol(return.cc)) {
+  rho.sign[i] <- apply(return.cc[i], 2, rho.cal)
+}
+```
+
+
+```{r, echo=FALSE}
+# find degrees of freedom
+df <- NULL
+for (i in 1:ncol(return.cc)) {
+  fun <- function (x) rho.sign[i]*(x-1)*beta(x/2,1/2)-2*sqrt(x-2)
+  df[i] <- uniroot(fun, c(2, 8), extendInt = "yes")$root
+}
+```
+
+
+```{r, echo=FALSE}
+# function to get optimal alpha that gives minimum SSE 
+alpha.opt.d <- c()
+SSE <- matrix(0, length(alpha), ncol(return.cc))
+
+for (i in 1:length(alpha)) {
+  for (j in 1:ncol(return.cc)) {
+    s <- mean(abs(return.cc[,j])/rho.sign[j])
+    for (k in 1:nrow(return.cc)) {
+      error <- abs(return.cc[k,j])/rho.sign[j] - s 
+      SSE[i,j] <- error^2 + SSE[i,j]
+      s.k <- alpha[i]*(abs(return.cc[k,j])/rho.sign[j]) + (1 - alpha[i])*s
+      s <- s.k
+    }
+     alpha.opt.d[j] <- alpha[which.min(SSE[,j])]
+  }
+}
+```
+
+
+```{r, echo=FALSE}
+# find one-step ahead forward volatility forecast using optimal alpha
+v.d <- c()
+for (i in 1:ncol(return.cc)) {
+  s <- mean(abs(return.cc[,i])/rho.sign[i])
+  for (j in 1:nrow(return.cc)) {
+    s.j <- alpha.opt.d[i]*(abs(return.cc[j,i])/rho.sign[i]) + (1 - alpha.opt.d[i])*s
+    s <- s.j
+  }
+  v.d[i] <- s
+}
+```
+
+
+```{r, echo=FALSE}
+# find VaR forecast
+VaR.d <- (-1)*v.d*tinv(p, df)
+```
+
+```{r, echo=FALSE}
+# asymptotic variance 
+as.var.e <- (t(kurt.cc+2))/4
+as.var.d <- (1-rho.sign^2)/(rho.sign^2)
+
+# summary statistics
+summarystat <- data.frame(ss1, rho.sign, df, as.var.e, as.var.d, alpha.opt.e, alpha.opt.d, v.e, v.d, VaR.e, VaR.d)
+colnames(summarystat) <- c("Mean", "SD", "Min", "Max", "Kurtosis", "Skewness", "Sign Corr", "DF", "As.Var_EWMA", "As.Var_DDEWMA", "Alpha_EWMA", "Alpha_DDEWMA", "Volatility_EWMA", "Volatility_DDEWMA", "VaR(0.01)_EWMA", "VaR(0.01)_DDEWMA")
+summarystat
+```
+
+From the summary table we find that TD has the highest sign correlation and RBC has the lowest. For all four stocks, the asymptotic variance of EWMA volatility estimates are higher than that of DDEWMA volatility estimates as expected. All stock cc returns have degrees of freedom less than 4. If they are t-distributed. their kurtosis will become infinity which leads to infinite asymptotic variance of the EEWA volatility estimator. 
+
+DDEWMA model gives higher volatility forecasting values than EWMA model does. Regardless of the model used, RBC has the highest volatility forecast, BNS has the second highest, TD has the third highest and BMO has the lowest. 
+
+In terms of VaR forecasts, the order is exactly the same with the order of volatility forecast for all four stocks as shown in the Figure 4 since VaR forecasts depend on the volatility forecasts directly. And DDEWMA model gives higher VaR forecasts than EWMA model for all four stocks. 
+
+```{r, echo=FALSE, warning=FALSE}
+# graphical summary for VaR forecasts
+stock <- c("BMO","RBC","TD","BNS")
+VaR.data <- data.frame(stock, VaR.e, VaR.d)
+
+p.e <- VaR.data %>% 
+  ggplot(aes(x = stock, y = VaR.e, size = VaR.e, color = stock)) + 
+  labs(x = "Stock", y = "VaR Forecast", color = "Stock") + 
+  geom_point(alpha = 0.3) +
+  scale_size(range = c(5, 15)) + 
+  guides(size = FALSE) + 
+  ggtitle("One-Step Forward VaR Forecast Using EWMA") + 
+  theme(plot.title = element_text(size=9))
+
+p.d <- VaR.data %>% 
+  ggplot(aes(x = stock, y = VaR.d, size = VaR.d, color = stock)) + 
+  labs(x = "Stock", y = "VaR Forecast", color = "Stock") + 
+  geom_point(alpha = 0.3) +
+  scale_size(range = c(5, 15)) +
+  guides(size = FALSE) +
+  ggtitle("One-Step Forward VaR Forecast Using DDEWMA") +
+  theme(plot.title = element_text(size=9))
+
+grid.arrange(p.e, p.d, ncol = 2,  top ="Figure 4")
+```
+
+
+# 4. Summary 
+
+In terms of forecasting volatility and VaR, the new proposed EF based DDEWMA model shows several advantages over the conventional EMWA model. Using sign correlation, DDEWMA model gives a better volatility estimator than EWMA model with unbiasedness and lower variance, which leads to more accurate VaR forecasts because VaR forecast depends on volatility forecast. 
+
+
+# 5. Reference
+
+Thavaneswaran, A., Alex P. and Julieta F. (2019): Generalized value at risk forecasting, Communications in Statistics - Theory and Methods, DOI: 10.1080/03610926.2019.1610443
+
+
+
+
